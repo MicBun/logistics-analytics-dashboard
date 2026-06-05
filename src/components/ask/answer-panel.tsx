@@ -24,10 +24,15 @@ import {
 import { DynamicChart } from "@/components/ask/dynamic-chart";
 import { ExplainabilityPanel } from "@/components/ask/explainability-panel";
 
+// Entrance motion for every answer kind (tw-animate-css utilities). Subtle by
+// design — and disabled entirely for users who prefer reduced motion.
+const ENTER_ANIMATION =
+  "animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none";
+
 export function AnswerPanel({ envelope }: { envelope: AnswerEnvelope }) {
   if (envelope.kind === "unsupported") {
     return (
-      <Alert>
+      <Alert className={ENTER_ANIMATION}>
         <AlertTitle>Not supported</AlertTitle>
         <AlertDescription>
           {envelope.message ??
@@ -39,7 +44,7 @@ export function AnswerPanel({ envelope }: { envelope: AnswerEnvelope }) {
 
   if (envelope.kind === "error") {
     return (
-      <Alert variant="destructive">
+      <Alert variant="destructive" className={ENTER_ANIMATION}>
         <AlertTitle>Something went wrong</AlertTitle>
         <AlertDescription>
           {envelope.message ?? "The query could not be completed."}
@@ -50,7 +55,7 @@ export function AnswerPanel({ envelope }: { envelope: AnswerEnvelope }) {
 
   // analytics | forecast — a computed answer.
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`flex flex-col gap-4 ${ENTER_ANIMATION}`}>
       <Card>
         <CardHeader>
           <CardTitle className="text-lg font-medium">

@@ -4,22 +4,25 @@
  * Query history (bonus feature). Persists the last 20 questions in
  * localStorage so they survive reloads.
  *
+ * localStorage is an EXTERNAL store, so the component reads it through
+ * useSyncExternalStore — the canonical React API for this — rather than
+ * mirroring it into useState from an effect (which lints as a cascading-render
+ * hazard and needed a manual refresh signal from the page). Subscribing gives
+ * us same-tab updates (via a custom event dispatched on every write) and
+ * cross-tab updates (via the browser's native 'storage' event) for free.
+ *
  * Prop contract:
- *   - `refreshSignal`: a counter the page bumps each time it records a new
- *     question (via the exported `recordQuery` helper). Bumping it tells this
- *     component to re-read localStorage. We keep the WRITE on the page (right
- *     after a successful ask) and the READ here, so history reflects only
- *     questions that actually ran — and there's a single source of truth for
- *     the storage shape (this file's helpers).
  *   - `onSelect(question)`: re-run a past question (the page feeds it back
  *     through the same ask path).
+ * The page records questions with the exported `recordQuery` helper after a
+ * successful ask; the write itself notifies this component — no signal prop.
  *
- * All localStorage access is SSR-guarded (`typeof window`) and wrapped in
- * try/catch — private-mode / quota / disabled-storage failures degrade to an
- * empty, harmless history rather than crashing the page.
+ * All localStorage access is SSR-guarded and wrapped in try/catch —
+ * private-mode / quota / disabled-storage failures degrade to an empty,
+ * harmless history rather than crashing the page.
  */
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +35,9 @@ import {
 
 const STORAGE_KEY = "ladb-query-history";
 const MAX_ENTRIES = 20;
+// Same-tab writes don't fire the browser's cross-tab 'storage' event, so every
+// write dispatches this custom event to notify subscribers in this tab.
+const CHANGE_EVENT = "ladb-query-history-change";
 
 export interface HistoryEntry {
   question: string;
@@ -39,20 +45,25 @@ export interface HistoryEntry {
   ts: number;
 }
 
+/** Defensive parse: ignore anything that isn't the shape we expect. */
+function parseEntries(raw: string | null): HistoryEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is HistoryEntry =>
+        e && typeof e.question === "string" && typeof e.ts === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
 function readHistory(): HistoryEntry[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Defensive filter: ignore anything that isn't the shape we expect.
-    return parsed.filter(
-      (e): e is HistoryEntry =>
-        e &&
-        typeof e.question === "string" &&
-        typeof e.ts === "number",
-    );
+    return parseEntries(window.localStorage.getItem(STORAGE_KEY));
   } catch {
     return [];
   }
@@ -65,12 +76,56 @@ function writeHistory(entries: HistoryEntry[]): void {
   } catch {
     // Storage unavailable/full — history is non-essential, so swallow.
   }
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
+
+// --- useSyncExternalStore plumbing -----------------------------------------
+
+/**
+ * getSnapshot must return a referentially STABLE value while the underlying
+ * data is unchanged, or useSyncExternalStore re-renders forever — so the
+ * parsed array is cached against the raw string it came from.
+ */
+let snapshot: { raw: string | null; entries: HistoryEntry[] } = {
+  raw: null,
+  entries: [],
+};
+
+function getSnapshot(): HistoryEntry[] {
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    raw = null;
+  }
+  if (raw !== snapshot.raw) {
+    snapshot = { raw, entries: parseEntries(raw) };
+  }
+  return snapshot.entries;
+}
+
+const NO_ENTRIES: HistoryEntry[] = [];
+/** The server has no storage — render the empty state until the client syncs. */
+function getServerSnapshot(): HistoryEntry[] {
+  return NO_ENTRIES;
+}
+
+function subscribe(onStoreChange: () => void): () => void {
+  // 'storage' covers writes from OTHER tabs; CHANGE_EVENT covers this tab.
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(CHANGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(CHANGE_EVENT, onStoreChange);
+  };
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Append a question to history (newest first, capped, consecutive-duplicate
- * deduped). Exported so the page records on a *successful* ask without this
- * component needing to own the ask flow.
+ * deduped). Exported so the page records on a *successful* ask; the write
+ * notifies <QueryHistory> directly via CHANGE_EVENT.
  */
 export function recordQuery(question: string): void {
   const q = question.trim();
@@ -87,23 +142,14 @@ export function recordQuery(question: string): void {
 }
 
 export function QueryHistory({
-  refreshSignal,
   onSelect,
 }: {
-  refreshSignal: number;
   onSelect: (question: string) => void;
 }) {
-  const [entries, setEntries] = useState<HistoryEntry[]>([]);
-
-  // Re-read on mount and whenever the page signals a new question was recorded.
-  // (localStorage can't be read during render/SSR, so we hydrate in an effect.)
-  useEffect(() => {
-    setEntries(readHistory());
-  }, [refreshSignal]);
+  const entries = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   function handleClear() {
     writeHistory([]);
-    setEntries([]);
   }
 
   return (

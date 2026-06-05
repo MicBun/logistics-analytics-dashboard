@@ -11,9 +11,17 @@
 
 import { useCallback, useState } from "react";
 
+import {
+  ChartColumn,
+  MessageSquareText,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+
 import type { AnswerEnvelope } from "@/lib/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnswerPanel } from "@/components/ask/answer-panel";
 import { QueryForm } from "@/components/ask/query-form";
@@ -41,8 +49,6 @@ export default function AskPage() {
   const [loading, setLoading] = useState(false);
   const [envelope, setEnvelope] = useState<AnswerEnvelope | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Bumped after each recorded question so <QueryHistory> re-reads storage.
-  const [historySignal, setHistorySignal] = useState(0);
 
   const ask = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -72,9 +78,9 @@ export default function AskPage() {
 
       const data: AnswerEnvelope = await res.json();
       setEnvelope(data);
-      // Record only questions that actually reached the server successfully.
+      // Record only questions that actually reached the server successfully —
+      // the write itself notifies <QueryHistory> (external-store subscription).
       recordQuery(trimmed);
-      setHistorySignal((n) => n + 1);
     } catch {
       // Network failure / JSON parse error.
       setError(
@@ -95,9 +101,10 @@ export default function AskPage() {
   );
 
   return (
-    // The root layout already renders the page's single <main> landmark —
-    // this is just a width container.
-    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    // The root layout's <main> already provides the width container
+    // (max-w-7xl px-4) — adding another here gave this route a different
+    // content width than the dashboard, so the two pages didn't line up.
+    <div className="py-8">
       <div className="grid gap-8 lg:grid-cols-[1fr_18rem]">
         {/* Main column */}
         <div className="flex flex-col gap-6">
@@ -166,16 +173,49 @@ export default function AskPage() {
             {!loading && !error && envelope && (
               <AnswerPanel envelope={envelope} />
             )}
+
+            {/* Empty state: before the first question this region was a void
+                of whitespace (visual-audit finding). Restate the architecture
+                instead — it fills the page AND tells visitors what makes the
+                answers trustworthy. */}
+            {!loading && !error && !envelope && (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+                  <MessageSquareText
+                    className="size-8 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <p className="text-sm font-medium">
+                    Ask anything about the 2025 order data
+                  </p>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    Your question becomes validated query parameters — every
+                    number is computed deterministically from the database,
+                    never by the model.
+                  </p>
+                  <div className="hidden items-center gap-6 text-xs text-muted-foreground sm:flex">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="size-3.5" aria-hidden /> AI interprets
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="size-3.5" aria-hidden /> Parameters
+                      validated
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <ChartColumn className="size-3.5" aria-hidden /> Computed
+                      &amp; charted
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 
         {/* Slim history column on lg+. Stacks below the main column on small
             screens. */}
         <aside className="lg:sticky lg:top-8 lg:self-start">
-          <QueryHistory
-            refreshSignal={historySignal}
-            onSelect={handleSelectHistory}
-          />
+          <QueryHistory onSelect={handleSelectHistory} />
         </aside>
       </div>
     </div>

@@ -23,36 +23,22 @@ import {
   YAxis,
 } from "recharts";
 
-import type { ChartSpec, Unit } from "@/lib/types";
+import {
+  SERIES_ANIMATION_ACTIVE,
+  CHART_HEIGHT,
+  TOOLTIP_CONTENT_STYLE,
+  TOOLTIP_ITEM_STYLE,
+  TOOLTIP_LABEL_STYLE,
+} from "@/components/charts/chart-theme";
+import { formatMetricValue } from "@/lib/format";
+import type { ChartSpec } from "@/lib/types";
 
 // Two series colors max (historical + forecast). Pulled from the theme so the
 // chart matches the rest of the app in light/dark mode.
 const SERIES_COLORS = ["var(--chart-1)", "var(--chart-2)"] as const;
 
-const CHART_HEIGHT = 300;
 // Above this many x buckets we thin the ticks so labels stop overlapping.
 const DENSE_X_THRESHOLD = 12;
-
-/**
- * Format a y value (axis tick or tooltip) for the spec's unit / percent flag.
- * Accepts the loose value types Recharts hands its formatters (including
- * arrays, which we don't plot — those fall through to a plain string).
- */
-function formatValue(
-  value: number | string | readonly (number | string)[] | null | undefined,
-  unit: Unit,
-  percent: boolean | undefined,
-): string {
-  if (value === null || value === undefined) return "—";
-  if (Array.isArray(value)) return value.join(", ");
-  const n = typeof value === "string" ? Number(value) : (value as number);
-  if (Number.isNaN(n)) return String(value);
-
-  if (percent) return `${(n * 100).toFixed(1)}%`;
-  if (unit === "usd") return `$${n.toLocaleString()}`;
-  if (unit === "days") return `${n.toLocaleString()} d`;
-  return n.toLocaleString();
-}
 
 export function DynamicChart({ spec }: { spec: ChartSpec }) {
   // Single-value answers (dimension 'none') get a big number, not a plot.
@@ -61,7 +47,7 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
     return (
       <div className="flex flex-col gap-1 py-2">
         <div className="text-4xl font-semibold tabular-nums">
-          {formatValue(v, spec.unit, spec.percent)}
+          {formatMetricValue(v, spec.unit, { percent: spec.percent })}
         </div>
         <div className="text-sm text-muted-foreground">{spec.title}</div>
       </div>
@@ -70,10 +56,18 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
 
   const dense = spec.data.length > DENSE_X_THRESHOLD;
 
-  // Shared axis/tooltip config so every chart formats y the same way.
-  const yTickFormatter = (v: number) => formatValue(v, spec.unit, spec.percent);
+  // Shared axis/tooltip config so every chart formats y the same way (via the
+  // app-wide formatter in src/lib/format.ts — ticks compact, tooltips long).
+  const yTickFormatter = (v: number) =>
+    formatMetricValue(v, spec.unit, {
+      percent: spec.percent,
+      style: "compact",
+      rateDecimals: 0,
+    });
   const tooltipFormatter = (v: unknown) =>
-    formatValue(v as number | string | null, spec.unit, spec.percent);
+    formatMetricValue(v as number | string | null, spec.unit, {
+      percent: spec.percent,
+    });
   // Percentages share a fixed 0..1 domain so small differences aren't
   // exaggerated and the reference line sits at a meaningful height.
   const yDomain: [number, number] | undefined = spec.percent ? [0, 1] : undefined;
@@ -91,23 +85,17 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
       tick={{ fontSize: 12 }}
       tickFormatter={yTickFormatter}
       domain={yDomain}
-      // Width must fit the widest tick label: "$…" amounts and "100.0%" both
-      // overflow the 48px default (the leading "1" of 100% gets clipped).
+      // Width must fit the widest tick label: "$…" amounts and percent ticks
+      // both overflow the 48px default.
       width={spec.unit === "usd" ? 72 : spec.percent ? 56 : 48}
     />
   );
-  const tooltip = (
-    <Tooltip
-      formatter={tooltipFormatter}
-      contentStyle={{
-        fontSize: 12,
-        borderRadius: 8,
-        background: "var(--popover)",
-        border: "1px solid var(--border)",
-        color: "var(--popover-foreground)",
-      }}
-    />
-  );
+  const tooltipProps = {
+    formatter: tooltipFormatter,
+    contentStyle: TOOLTIP_CONTENT_STYLE,
+    labelStyle: TOOLTIP_LABEL_STYLE,
+    itemStyle: TOOLTIP_ITEM_STYLE,
+  };
   const refLine = spec.referenceLine ? (
     <ReferenceLine
       y={spec.referenceLine.value}
@@ -130,7 +118,7 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             {xAxis}
             {yAxis}
-            {tooltip}
+            <Tooltip {...tooltipProps} cursor={{ fill: "var(--muted)" }} />
             {refLine}
             {spec.series.map((s, i) => (
               <Bar
@@ -139,6 +127,7 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
                 name={s.label}
                 fill={SERIES_COLORS[i % SERIES_COLORS.length]}
                 radius={[4, 4, 0, 0]}
+                isAnimationActive={SERIES_ANIMATION_ACTIVE}
               >
                 {/* When a winner is highlighted (superlative answer), dim the
                     other bars so the answer reads at a glance. Per-cell styling
@@ -165,7 +154,7 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             {xAxis}
             {yAxis}
-            {tooltip}
+            <Tooltip {...tooltipProps} cursor={{ stroke: "var(--border)" }} />
             {refLine}
             {spec.series.map((s, i) => (
               <Line
@@ -178,6 +167,7 @@ export function DynamicChart({ spec }: { spec: ChartSpec }) {
                 strokeDasharray={s.kind === "forecast" ? "6 4" : undefined}
                 dot={false}
                 connectNulls
+                isAnimationActive={SERIES_ANIMATION_ACTIVE}
               />
             ))}
           </LineChart>

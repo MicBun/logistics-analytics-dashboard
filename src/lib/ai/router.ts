@@ -27,6 +27,7 @@ import {
   groupedDisplayRows,
 } from "@/lib/chart-select";
 import { buildForecast } from "@/lib/forecast";
+import { displayDimensionKey } from "@/lib/format";
 import { fmtValue, summarizeAnalytics, summarizeForecast } from "@/lib/summarize";
 import type {
   AnalyticsResult,
@@ -246,7 +247,8 @@ function buildAnalyticsTable(
       "Exceptions",
     ],
     rows: tableRows.map((row) => [
-      row.key,
+      // Same display mapping the chart/summary use (status tokens humanized).
+      displayDimensionKey(row.key, result.dimension),
       fmtValue(row.value, result.unit),
       row.agg.total,
       row.agg.delivered,

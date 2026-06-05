@@ -1,0 +1,9 @@
+<!-- Brand icon: ascending bars on the app's chart-1 indigo (oklch(0.585 0.2 277)
+     = #6367ef). The opacity ramp echoes the superlative-highlight motif used in
+     charts. favicon.ico + apple-icon.png are rasterized from this exact file. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#6367ef"/>
+  <rect x="6.5" y="17.5" width="5" height="8" rx="2" fill="#fff" fill-opacity="0.65"/>
+  <rect x="13.5" y="12.5" width="5" height="13" rx="2" fill="#fff" fill-opacity="0.82"/>
+  <rect x="20.5" y="6.5" width="5" height="19" rx="2" fill="#fff"/>
+</svg>

@@ -10,6 +10,7 @@
  */
 
 import { DIMENSION_LABELS, METRIC_META } from "./catalog";
+import { displayDimensionKey } from "./format";
 import type {
   AnalyticsResult,
   ForecastResult,
@@ -148,15 +149,17 @@ export function summarizeAnalytics(
   const rows = result.rows;
   const dimLabel = DIMENSION_LABELS[result.dimension];
 
+  // Group keys are humanized for display (status tokens → "In transit") —
+  // same mapping the chart and table use, so all three surfaces agree.
   if (params.sort && params.limit) {
     // Explicit ranking (e.g. "which carrier has the highest delay rate?").
     const top = rows[0];
     const superlative = params.sort === "desc" ? "highest" : "lowest";
     const second = rows[1];
     const tail = second
-      ? `, followed by ${second.key} (${fmtValue(second.value, unit)})`
+      ? `, followed by ${displayDimensionKey(second.key, result.dimension)} (${fmtValue(second.value, unit)})`
       : "";
-    return `${top.key} has the ${superlative} ${lc(label)} at ${fmtValue(
+    return `${displayDimensionKey(top.key, result.dimension)} has the ${superlative} ${lc(label)} at ${fmtValue(
       top.value,
       unit,
     )}${tail}.`;
@@ -165,10 +168,10 @@ export function summarizeAnalytics(
   // Grouped without an explicit ranking request: describe the breakdown.
   // rows are still value-sorted by default, so rows[0] is the top group.
   const top = rows[0];
-  return `${label} by ${lc(dimLabel)}: top is ${top.key} (${fmtValue(
-    top.value,
-    unit,
-  )}) across ${rows.length} groups.`;
+  return `${label} by ${lc(dimLabel)}: top is ${displayDimensionKey(
+    top.key,
+    result.dimension,
+  )} (${fmtValue(top.value, unit)}) across ${rows.length} groups.`;
 }
 
 // ---------------------------------------------------------------------------

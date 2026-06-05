@@ -126,6 +126,15 @@ export const STATUSES = [
 ] as const;
 export type Status = (typeof STATUSES)[number];
 
+/** Human labels for status enum tokens — UI surfaces never show "in_transit". */
+export const STATUS_LABELS: Record<Status, string> = {
+  delivered: "Delivered",
+  delayed: "Delayed",
+  in_transit: "In transit",
+  exception: "Exception",
+  canceled: "Canceled",
+};
+
 // ---------------------------------------------------------------------------
 // Date handling
 // ---------------------------------------------------------------------------

@@ -1,6 +1,18 @@
+import {
+  Banknote,
+  Clock,
+  Package,
+  PackageCheck,
+  Target,
+  Timer,
+  TriangleAlert,
+  Truck,
+} from "lucide-react";
+
 import { runAnalyticsQuery } from "@/lib/analytics";
 import { deriveKpis } from "@/lib/metrics";
 import { STATUSES } from "@/lib/catalog";
+import { fmtDays, fmtInt, fmtRate, fmtUsd } from "@/lib/format";
 import type {
   AggRow,
   DashboardKpis,
@@ -73,16 +85,11 @@ const ZERO_AGG: AggRow = {
   unitsSum: 0,
 };
 
-// Number formatters — values are formatted to strings BEFORE reaching KpiCard.
-const fmtInt = (n: number) => n.toLocaleString("en-US");
-const fmtRate = (r: number | null, decimals = 1) =>
-  r === null ? "—" : `${(r * 100).toFixed(decimals)}%`;
-const fmtDays = (d: number | null) => (d === null ? "—" : `${d.toFixed(2)} days`);
-
 export default async function DashboardPage() {
-  const [kpiRes, volumeRes, statusRes, carrierRes, regionRes] =
+  const [kpiRes, valueRes, volumeRes, statusRes, carrierRes, regionRes] =
     await Promise.all([
       runAnalyticsQuery(query({ metric: "order_count", dimension: "none" })),
+      runAnalyticsQuery(query({ metric: "order_value_sum", dimension: "none" })),
       runAnalyticsQuery(query({ metric: "order_count", dimension: "month" })),
       runAnalyticsQuery(query({ metric: "order_count", dimension: "status" })),
       runAnalyticsQuery(
@@ -95,6 +102,9 @@ export default async function DashboardPage() {
   // zero aggregate so an empty database renders zeros instead of crashing.
   const agg = kpiRes.rows[0]?.agg ?? ZERO_AGG;
   const kpis: DashboardKpis = deriveKpis(agg);
+
+  // Gross order value — same engine, value-kind result (single row keyed 'all').
+  const grossValue = valueRes.rows[0]?.value ?? null;
 
   // Show every lifecycle state, in lifecycle order, even if a status is absent
   // from the data (the grouped result only contains statuses that occur).
@@ -113,29 +123,74 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      {/* KPI row */}
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-        <KpiCard title="Total orders" value={fmtInt(kpis.totalOrders)} />
-        <KpiCard title="Delivered" value={fmtInt(kpis.deliveredOrders)} />
-        <KpiCard title="Delayed" value={fmtInt(kpis.delayedOrders)} />
-        <KpiCard
-          title="On-time rate"
-          value={fmtRate(kpis.onTimeRate)}
-          subtitle="delivered ÷ (delivered + delayed) — status-based proxy"
-        />
-        <KpiCard
-          title="Avg delivery time"
-          value={fmtDays(kpis.avgDeliveryTime)}
-          subtitle="delivered orders only"
-        />
-        {/* 2 decimals: 2.75% is exact; 1 decimal rounds to 2.8%, which matches
-            nothing in the README's locked KPI table. */}
-        <KpiCard title="Exception rate" value={fmtRate(kpis.exceptionRate, 2)} />
-        <KpiCard
-          title="Open orders"
-          value={fmtInt(kpis.openOrders)}
-          subtitle="in transit — excluded from rates"
-        />
+      {/* KPI rows — two balanced groups of four: counts first (what happened),
+          then quality & value (how well it went). Icon tones reuse the chart
+          tokens (teal = good, amber = late, red = problem) so color means the
+          same thing on a KPI tile as it does on a chart bar. */}
+      <section aria-label="Order volume KPIs" className="space-y-3">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Order volume
+        </h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <KpiCard
+            title="Total orders"
+            value={fmtInt(kpis.totalOrders)}
+            icon={Package}
+          />
+          <KpiCard
+            title="Delivered"
+            value={fmtInt(kpis.deliveredOrders)}
+            icon={PackageCheck}
+            tone="positive"
+          />
+          <KpiCard
+            title="Delayed"
+            value={fmtInt(kpis.delayedOrders)}
+            icon={Clock}
+            tone="warning"
+          />
+          <KpiCard
+            title="Open orders"
+            value={fmtInt(kpis.openOrders)}
+            subtitle="in transit — excluded from rates"
+            icon={Truck}
+          />
+        </div>
+      </section>
+
+      <section aria-label="Delivery quality and value KPIs" className="space-y-3">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Delivery quality &amp; value
+        </h2>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <KpiCard
+            title="On-time rate"
+            value={fmtRate(kpis.onTimeRate)}
+            subtitle="delivered ÷ (delivered + delayed) — status-based proxy"
+            icon={Target}
+            tone="positive"
+          />
+          <KpiCard
+            title="Avg delivery time"
+            value={fmtDays(kpis.avgDeliveryTime)}
+            subtitle="delivered orders only"
+            icon={Timer}
+          />
+          {/* 2 decimals: 2.75% is exact; 1 decimal rounds to 2.8%, which matches
+              nothing in the README's locked KPI table. */}
+          <KpiCard
+            title="Exception rate"
+            value={fmtRate(kpis.exceptionRate, 2)}
+            icon={TriangleAlert}
+            tone="danger"
+          />
+          <KpiCard
+            title="Total order value"
+            value={grossValue === null ? "—" : fmtUsd(grossValue)}
+            subtitle="gross — promo discounts not applied"
+            icon={Banknote}
+          />
+        </div>
       </section>
 
       {/* Charts grid (2×2 on lg) */}

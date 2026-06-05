@@ -6,6 +6,7 @@ import {
   chartForForecast,
   groupedDisplayRows,
 } from "@/lib/chart-select";
+import { displayDimensionKey } from "@/lib/format";
 import {
   fmtValue,
   summarizeAnalytics,
@@ -74,6 +75,19 @@ describe("fmtValue", () => {
     expect(fmtValue(1234, "orders")).toBe("1,234");
     expect(fmtValue(42, "units")).toBe("42");
     expect(fmtValue(null, "percent")).toBe("n/a");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// displayDimensionKey — status tokens humanized, everything else untouched
+// ---------------------------------------------------------------------------
+
+describe("displayDimensionKey", () => {
+  it("humanizes status tokens and passes other dimensions through", () => {
+    expect(displayDimensionKey("in_transit", "status")).toBe("In transit");
+    expect(displayDimensionKey("delivered", "status")).toBe("Delivered");
+    expect(displayDimensionKey("GLS", "carrier")).toBe("GLS");
+    expect(displayDimensionKey("2025-01", "month")).toBe("2025-01");
   });
 });
 
@@ -185,6 +199,40 @@ describe("chartForAnalytics", () => {
     expect(spec?.type).toBe("bar");
     expect(spec?.data).toHaveLength(3); // all carriers, not just GLS
     expect(spec?.highlightKey).toBe("GLS");
+  });
+
+  it("humanizes status keys in grouped chart data", () => {
+    const result: AnalyticsResult = {
+      kind: "grouped",
+      metric: "order_count",
+      dimension: "status",
+      unit: "orders",
+      rows: [row("delivered", 304), row("in_transit", 27)],
+      value: null,
+    };
+    const spec = chartForAnalytics(result, queryParams({ dimension: "status" }));
+    expect(spec?.data.map((d) => d.key)).toEqual(["Delivered", "In transit"]);
+  });
+
+  it("humanizes highlightKey consistently with the data keys (status superlative)", () => {
+    // The renderer dims bars by comparing row key === highlightKey, so the two
+    // MUST go through the same display mapping or highlighting silently breaks.
+    const ranking = [row("in_transit", 27), row("exception", 11)];
+    const result: AnalyticsResult = {
+      kind: "grouped",
+      metric: "order_count",
+      dimension: "status",
+      unit: "orders",
+      rows: [ranking[0]],
+      ranking,
+      value: null,
+    };
+    const spec = chartForAnalytics(
+      result,
+      queryParams({ dimension: "status", sort: "desc", limit: 1 }),
+    );
+    expect(spec?.highlightKey).toBe("In transit");
+    expect(spec?.data[0].key).toBe("In transit"); // must match for the dimming
   });
 
   it("superlative over a single group → big number, not a lone bar", () => {
@@ -363,6 +411,20 @@ describe("summarizeAnalytics", () => {
     expect(s).toContain("OnTrac has the highest");
     expect(s).toContain("22.0%");
     expect(s).toContain("LaserShip");
+  });
+
+  it("humanizes status keys in grouped summaries", () => {
+    const result: AnalyticsResult = {
+      kind: "grouped",
+      metric: "order_count",
+      dimension: "status",
+      unit: "orders",
+      rows: [row("in_transit", 27), row("exception", 11)],
+      value: null,
+    };
+    const s = summarizeAnalytics(result, queryParams({ dimension: "status" }));
+    expect(s).toContain("In transit");
+    expect(s).not.toContain("in_transit");
   });
 
   it("timeseries summary reports total and peak for count metrics", () => {

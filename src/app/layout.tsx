@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,13 +26,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    // suppressHydrationWarning: next-themes sets the theme class on <html>
+    // before hydration (to avoid a flash of the wrong theme), so the server
+    // and client html attributes legitimately differ.
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4">{children}</main>
+        <ThemeProvider>
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4">{children}</main>
+        </ThemeProvider>
       </body>
     </html>
   );

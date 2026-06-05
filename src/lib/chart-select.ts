@@ -9,6 +9,7 @@
  */
 
 import { DIMENSION_LABELS, METRIC_META } from "./catalog";
+import { displayDimensionKey } from "./format";
 import type {
   AnalyticsResult,
   ChartSpec,
@@ -84,9 +85,14 @@ export function chartForAnalytics(
     };
   }
 
-  // kind === 'grouped' — categorical breakdown / ranking.
+  // kind === 'grouped' — categorical breakdown / ranking. Keys are humanized
+  // for display (status enum tokens → "In transit"); other dimensions pass
+  // through unchanged.
   const displayRows = groupedDisplayRows(result, params);
-  const groupedData = displayRows.map((r) => ({ key: r.key, value: r.value }));
+  const groupedData = displayRows.map((r) => ({
+    key: displayDimensionKey(r.key, result.dimension),
+    value: r.value,
+  }));
 
   // A single group offers nothing to compare against — a one-bar chart is just
   // noise. Render the scalar as a big number instead (the question already has
@@ -114,9 +120,11 @@ export function chartForAnalytics(
   };
 
   // Superlative (limit=1): the winner is the answer, so emphasize its bar within
-  // the full field. result.rows[0] is the single answer row.
+  // the full field. result.rows[0] is the single answer row. The renderer dims
+  // bars by comparing row key === highlightKey, so the highlight MUST go through
+  // the same display mapping as the data keys above.
   if (params.limit === 1 && result.rows.length > 0) {
-    spec.highlightKey = result.rows[0].key;
+    spec.highlightKey = displayDimensionKey(result.rows[0].key, result.dimension);
   }
 
   // The on-time chart carries a 95% target line for visual context — our data
