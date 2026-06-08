@@ -14,10 +14,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || "https://logistics.micbun.com"
+).replace(/\/+$/, "");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Logistics Analytics",
   description:
     "AI-powered logistics analytics dashboard — KPIs, charts, and natural-language queries over a unified order dataset.",
+  openGraph: {
+    title: "Logistics Analytics",
+    description:
+      "AI-powered logistics analytics dashboard — KPIs, charts, and natural-language queries over a unified order dataset.",
+    url: "/",
+    siteName: "Logistics Analytics",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
